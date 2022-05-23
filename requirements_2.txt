@@ -1,0 +1,4 @@
+SQLAlchemy
+postgres
+Flask
+Flask-Migrate
