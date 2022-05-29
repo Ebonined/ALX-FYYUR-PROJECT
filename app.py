@@ -10,8 +10,9 @@ from flask_moment import Moment
 from flask_sqlalchemy import SQLAlchemy
 import logging
 from logging import Formatter, FileHandler
-from flask_wtf import Form
+# from flask_wtf import Form
 from forms import *
+
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
@@ -207,6 +208,7 @@ def show_venue(venue_id):
     "upcoming_shows_count": 1,
   }
   data = list(filter(lambda d: d['id'] == venue_id, [data1, data2, data3]))[0]
+  print(type(data))
   return render_template('pages/show_venue.html', venue=data)
 
 #  Create Venue
