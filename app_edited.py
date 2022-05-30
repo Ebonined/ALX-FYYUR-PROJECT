@@ -57,7 +57,8 @@ class Venue(db.Model):
 class Artist(db.Model):
     __tablename__ = "artist"
 
-    artist_id = db.Column(db.Integer, primary_key=True)
+    artist_id = db.Column(db.Integer, db.Sequence(
+        'artist_artist_id_seq', start=1), primary_key=True)
     name = db.Column(db.String)
     city = db.Column(db.String(120))
     state = db.Column(db.String(120))
@@ -98,7 +99,13 @@ class upcoming_shows(db.Model):
 # ----------------------------------------------------------------------------#
 # Filters.
 # ----------------------------------------------------------------------------#
-
+def format_date(value, format="medium"):
+    date = dateutil.parser.parse(value)
+    if format == "full":
+        format = "EEEE MMMM, d, y 'at' h:mma"
+    elif format == "medium":
+        format = "y-MM-dd h:mma"
+    return babel.dates.format_datetime(date, format, locale="en")
 
 def format_datetime(value, format="medium"):
     return value
@@ -294,19 +301,20 @@ def create_venue_submission():
     result = request.form
     print(result)
     print(result["name"])
-    # try:
-    venue = Venue(name=result["name"], genres=",".join(result.getlist('genres')),
-                    address=result["address"], city=result["city"], state=result["state"],
-                    phone=result["phone"], website=result["website_link"],
-                    facebook_link=result["facebook_link"],  seeking_talent=checkboxget(result, 'seeking_talent'),
-                    image_link=result["image_link"], seeking_description=result["seeking_description"])
-    db.session.add(venue)
-    db.session.commit()
-    flash("Venue " + request.form["name"] + " was successfully listed!")
-    # except:
-    #     db.session.rollback()
-    #     print('ran')
-    #     flash("I Ran")
+    try:
+        venue = Venue(name=result["name"], genres=",".join(result.getlist('genres')),
+                      address=result["address"], city=result["city"], state=result["state"],
+                      phone=result["phone"], website=result["website_link"],
+                      facebook_link=result["facebook_link"],  seeking_talent=checkboxget(
+                          result, 'seeking_talent'),
+                      image_link=result["image_link"], seeking_description=result["seeking_description"])
+        db.session.add(venue)
+        db.session.commit()
+        flash("Venue " + result["name"] + " was successfully listed!")
+    except:
+        db.session.rollback()
+        flash("An error occurred. Venue " +
+              result["name"] + ' could not be listed.')
     # on successful db insert, flash success
     # TODO: on unsuccessful db insert, flash an error instead.
     # e.g., flash('An error occurred. Venue ' + data.name + ' could not be listed.')
@@ -547,9 +555,22 @@ def create_artist_submission():
     # called upon submitting the new artist listing form
     # TODO: insert form data as a new Venue record in the db, instead
     # TODO: modify data to be the data object returned from db insertion
-
+    result = request.form
+    try:
+        artist = Artist(name=result["name"], genres=",".join(result.getlist('genres')),
+                        city=result["city"], state=result["state"],
+                        phone=result["phone"], website=result["website_link"],
+                        facebook_link=result["facebook_link"],
+                        seeking_venue=checkboxget(result, 'seeking_venue'),
+                        image_link=result["image_link"], seeking_description=result["seeking_description"])
+        db.session.add(artist)
+        db.session.commit()
+        flash("Artist " + result["name"] + " was successfully listed!")
+    except:
+        db.session.rollback()
+        flash('An error occurred. Artist ' +
+              result["name"] + ' could not be listed.')
     # on successful db insert, flash success
-    flash("Artist " + request.form["name"] + " was successfully listed!")
     # TODO: on unsuccessful db insert, flash an error instead.
     # e.g., flash('An error occurred. Artist ' + data.name + ' could not be listed.')
     return render_template("pages/home.html")
@@ -602,6 +623,36 @@ def create_shows():
 def create_show_submission():
     # called to create new shows in the db, upon submitting new show listing form
     # TODO: insert form data as a new Show record in the db, instead
+    result = request.form
+    artist_data = db.session.execute(f'''SELECT ARTIST_ID, NAME, IMAGE_LINK FROM  ARTIST
+                        WHERE ARTIST_ID = {result['artist_id']}''')
+    venue_data = db.session.execute(f'''SELECT VENUE_ID FROM  VENUE
+                        WHERE VENUE_ID = {result['venue_id']}''')
+    allid = db.session.execute('SELECT SHOW_ID FROM UPCOMING_SHOWS')
+    artistlist = list(artist_data)
+    venuelist = list(venue_data)
+    ids = [int(id['show_id']) for id in allid]
+    ids.sort()
+    ini = 1
+    for id in ids:
+        if ini < id:
+            ini = ini
+            break
+        else:
+            ini += 1
+    if artistlist and venuelist:
+        art_id = artistlist[0]['artist_id']
+        art_name = artistlist[0]['name']
+        art_imagelink = artistlist[0]['image_link']
+        ven_id = venuelist[0]['venue_id']
+        start_time = format_date(result['start_time'])
+        print(art_id , art_name, art_imagelink, ven_id, start_time)
+        show = upcoming_shows(show_id=ini, artist_id=art_id, artist_name=art_name,
+                        artist_image_link=art_imagelink, venue_id=ven_id,
+                        start_time=start_time)
+        db.session.add(show)
+        db.session.commit()
+ 
 
     # on successful db insert, flash success
     flash("Show was successfully listed!")
