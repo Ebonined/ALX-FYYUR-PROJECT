@@ -2,18 +2,21 @@
 # Imports
 # ----------------------------------------------------------------------------#
 
-from email.mime import image
 import json
-import dateutil.parser
+import logging
+from email.mime import image
+from logging import FileHandler, Formatter
+
 import babel
-from flask import Flask, render_template, request, Response, flash, redirect, url_for
+import dateutil.parser
+from flask import (Flask, Response, flash, redirect, render_template, request,
+                   url_for)
+from flask_migrate import Migrate
 from flask_moment import Moment
 from flask_sqlalchemy import SQLAlchemy
-import logging
-from logging import Formatter, FileHandler
 from flask_wtf import Form
+
 from forms import *
-from flask_migrate import Migrate
 
 # ----------------------------------------------------------------------------#
 # App Config.
@@ -36,7 +39,7 @@ class Venue(db.Model):
     __tablename__ = "venue"
 
     venue_id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
+    name = db.Column(db.String, unique=True)
     genres = db.Column(db.String(100))
     address = db.Column(db.String(120))
     city = db.Column(db.String(120))
@@ -47,7 +50,7 @@ class Venue(db.Model):
     seeking_talent = db.Column(db.Boolean)
     seeking_description = db.Column(db.String(500))
     image_link = db.Column(db.String(500))
-
+    db.UniqueConstraint('name', name='uix_1')
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
 
 
@@ -114,8 +117,13 @@ def sqlarraytolist(string):
     return string.split(",")
 
 
-def listTosqlarray(list):
-    pass
+def checkboxget(mdict, key):
+    try:
+        var = mdict[key]
+        if var:
+            return True
+    except:
+        return False
 
 
 # ----------------------------------------------------------------------------#
@@ -190,7 +198,7 @@ def search_venues():
                                 GROUP BY VENUE_ID) 
                                 AS UPCOMING ON VENUE.VENUE_ID = UPCOMING.VENUE_ID 
                                 WHERE LOWER(VENUE.NAME) like '%{search_term}%'"""
-                                )
+                                  )
 
     response = {}
     search_list = list(seresult)
@@ -283,9 +291,23 @@ def create_venue_form():
 def create_venue_submission():
     # TODO: insert form data as a new Venue record in the db, instead
     # TODO: modify data to be the data object returned from db insertion
-
-    # on successful db insert, flash success
+    result = request.form
+    print(result)
+    print(result["name"])
+    # try:
+    venue = Venue(name=result["name"], genres=",".join(result.getlist('genres')),
+                    address=result["address"], city=result["city"], state=result["state"],
+                    phone=result["phone"], website=result["website_link"],
+                    facebook_link=result["facebook_link"],  seeking_talent=checkboxget(result, 'seeking_talent'),
+                    image_link=result["image_link"], seeking_description=result["seeking_description"])
+    db.session.add(venue)
+    db.session.commit()
     flash("Venue " + request.form["name"] + " was successfully listed!")
+    # except:
+    #     db.session.rollback()
+    #     print('ran')
+    #     flash("I Ran")
+    # on successful db insert, flash success
     # TODO: on unsuccessful db insert, flash an error instead.
     # e.g., flash('An error occurred. Venue ' + data.name + ' could not be listed.')
     # see: http://flask.pocoo.org/docs/1.0/patterns/flashing/
@@ -312,7 +334,7 @@ def artists():
     artistresult = db.session.execute("""SELECT ARTIST.ARTIST_ID AS ID,
                                         ARTIST.NAME FROM ARTIST
                                         ORDER BY ARTIST.ARTIST_ID ASC"""
-                                    )
+                                      )
     artist_list = list(artistresult)
     data = []
     for artist in artist_list:
@@ -329,7 +351,7 @@ def search_artists():
     # TODO: implement search on artists with partial string search. Ensure it is case-insensitive.
     # seach for "A" should return "Guns N Petals", "Matt Quevado", and "The Wild Sax Band".
     # search for "band" should return "The Wild Sax Band".
-    search_term=request.form.get("search_term", "")
+    search_term = request.form.get("search_term", "")
     seresult = db.session.execute(f"""SELECT ARTIST.ARTIST_ID AS ID,
                                 ARTIST.NAME AS NAME,
                                 COALESCE(UPCOMING.NUM_UPCOMING_SHOWS,0) 
@@ -338,7 +360,7 @@ def search_artists():
                                 FROM UPCOMING_SHOWS GROUP BY ARTIST_ID) 
                                 AS UPCOMING ON ARTIST.ARTIST_ID = UPCOMING.ARTIST_ID
                                 WHERE LOWER(ARTIST.NAME) like '%{search_term}%'"""
-                                    )
+                                  )
     response = {}
     search_list = list(seresult)
     response['count'] = len(search_list)
@@ -444,20 +466,20 @@ def edit_artist(artist_id):
 def edit_artist_submission(artist_id):
     # TODO: take values from the form submitted, and update existing
     # artist record with ID <artist_id> using the new attributes
-    result = request.get_json()
+    result = request.form
     query_filter = db.session.query(Artist).filter(
         Artist.artist_id == artist_id)
 
     query_filter.update(
         {
             Artist.name: result["name"],
-            Artist.genres: ",".join(result["genres"]),
+            Artist.genres: ",".join(result.getlist("genres")),
             Artist.city: result["city"],
             Artist.state: result["state"],
             Artist.phone: result["phone"],
             Artist.website: result["website_link"],
             Artist.facebook_link: result["facebook_link"],
-            Artist.seeking_venue: result["seeking_venue"],
+            Artist.seeking_venue: checkboxget(result, 'seeking_venue'),
             Artist.image_link: result["image_link"],
             Artist.seeking_description: result["seeking_description"],
         }
@@ -487,21 +509,21 @@ def edit_venue(venue_id):
 def edit_venue_submission(venue_id):
     # TODO: take values from the form submitted, and update existing
     # venue record with ID <venue_id> using the new attributes
-    result = request.get_json()
+    result = request.form
     print(result)
     query_filter = db.session.query(Venue).filter(Venue.venue_id == venue_id)
 
     query_filter.update(
         {
             Venue.name: result["name"],
-            Venue.genres: ",".join(result["genres"]),
+            Venue.genres: ",".join(result.getlist('genres')),
             Venue.address: result["address"],
             Venue.city: result["city"],
             Venue.state: result["state"],
             Venue.phone: result["phone"],
             Venue.website: result["website_link"],
             Venue.facebook_link: result["facebook_link"],
-            Venue.seeking_talent: result["seeking_talent"],
+            Venue.seeking_talent: checkboxget(result, 'seeking_talent'),
             Venue.image_link: result["image_link"],
             Venue.seeking_description: result["seeking_description"],
         }
@@ -547,14 +569,14 @@ def shows():
                                     FROM PAST_SHOWS
                                     JOIN VENUE ON PAST_SHOWS.VENUE_ID = VENUE.VENUE_ID
                                     ORDER BY START_TIME ASC"""
-                                        )
+                                           )
     up_shows_result = db.session.execute(f"""SELECT VENUE.VENUE_ID AS VENUE_ID,
                                     VENUE.NAME AS VENUE_NAME, ARTIST_ID,
                                     ARTIST_NAME, ARTIST_IMAGE_LINK, START_TIME
                                     FROM UPCOMING_SHOWS
                                     JOIN VENUE ON UPCOMING_SHOWS.VENUE_ID = VENUE.VENUE_ID
                                     ORDER BY START_TIME ASC"""
-                                        )
+                                         )
     ps_list = list(past_shows_result)
     ups_list = list(up_shows_result)
     ps_list.extend(ups_list)
@@ -562,7 +584,7 @@ def shows():
     data = []
     for show in ps_list:
         cols = show.keys()
-        tempdict ={}
+        tempdict = {}
         for col in cols:
             tempdict[col] = show[col]
         data.append(tempdict)
