@@ -2,122 +2,67 @@
 {% block title %}Edit Venue{% endblock %}
 {% block content %}
 <div class="form-wrapper">
-  <form id="form" class="form" method="post" {% if venue.id %} data-id='{{venue.id}}' {% else %} data-id='{{venue.venue_id}}' {%
-    endif %}>
-    <h3 class="form-heading">Edit venue <em>{{ venue.name }}</em> <a href="{{ url_for('index') }}"
-        title="Back to homepage"><i class="fa fa-home pull-right"></i></a></h3>
-    <div class="form-group">
-      <label for="name">Name</label>
-      {{ form.name(class_ = 'form-control', autofocus = true, value = venue.name) }}
-    </div>
-    <div class="form-group">
-      <label>City & State</label>
-      <div class="form-inline">
-        <div class="form-group">
-          {{ form.city(class_ = 'form-control', placeholder='City', autofocus = true, value = venue.city) }}
-        </div>
-        <div class="form-group">
-          {{ form.state(class_ = 'form-control', placeholder='State', autofocus = true) }}
-        </div>
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="address">Address</label>
-      {{ form.address(class_ = 'form-control', autofocus = true, value = venue.address) }}
-    </div>
-    <div class="form-group">
-      <label for="phone">Phone</label>
-      {{ form.phone(class_ = 'form-control', placeholder='xxx-xxx-xxxx', autofocus = true, value = venue.phone) }}
-    </div>
-    <div class="form-group">
-      <label for="genres">Genres</label>
-      <small>Ctrl+Click to select multiple</small>
-      {{ form.genres(class_ = 'form-control', placeholder='Genres, separated by commas', autofocus = true) }}
-    </div>
-    <div class="form-group">
-      <label for="facebook_link">Facebook Link</label>
-      {{ form.facebook_link(class_ = 'form-control', placeholder='http://', autofocus = true, value =
-      venue.facebook_link) }}
-    </div>
+	<form id="form" class="form" method="post" {% if venue.id %} data-id='{{venue.id}}'{% else %}
+		data-id='{{venue.venue_id}}' {% endif %}>
+		<h3 class="form-heading">Edit venue <em>{{ venue.name }}</em> <a href="{{ url_for('index') }}"
+				title="Back to homepage"><i class="fa fa-home pull-right"></i></a></h3>
+		<div class="form-group">
+			<label for="name">Name</label>
+			{{ form.name(class_ = 'form-control', autofocus = true, value = venue.name) }}
+		</div>
+		<div class="form-group">
+			<label>City & State</label>
+			<div class="form-inline">
+				<div class="form-group">
+					{{ form.city(class_ = 'form-control', placeholder='City', autofocus = true, value = venue.city) }}
+				</div>
+				<div class="form-group">
+					{{ form.state(class_ = 'form-control', placeholder='State', autofocus = true) }}
+				</div>
+			</div>
+		</div>
+		<div class="form-group">
+			<label for="address">Address</label>
+			{{ form.address(class_ = 'form-control', autofocus = true, value = venue.address) }}
+		</div>
+		<div class="form-group">
+			<label for="phone">Phone</label>
+			{{ form.phone(class_ = 'form-control', placeholder='xxx-xxx-xxxx', autofocus = true, value = venue.phone) }}
+		</div>
+		<div class="form-group">
+			<label for="genres">Genres</label>
+			<small>Ctrl+Click to select multiple</small>
+			{{ form.genres(class_ = 'form-control', placeholder='Genres, separated by commas', autofocus = true) }}
+		</div>
+		<div class="form-group">
+			<label for="facebook_link">Facebook Link</label>
+			{{ form.facebook_link(class_ = 'form-control', placeholder='http://', autofocus = true, value =
+			venue.facebook_link) }}
+		</div>
 
-    <div class="form-group">
-      <label for="image_link">Image Link</label>
-      {{ form.image_link(class_ = 'form-control', placeholder='http://', autofocus = true, value = venue.image_link) }}
-    </div>
+		<div class="form-group">
+			<label for="image_link">Image Link</label>
+			{{ form.image_link(class_ = 'form-control', placeholder='http://', autofocus = true, value =
+			venue.image_link) }}
+		</div>
 
-    <div class="form-group">
-      <label for="website_link">Website Link</label>
-      {{ form.website_link(class_ = 'form-control', placeholder='http://', autofocus = true, value = venue.website) }}
-    </div>
+		<div class="form-group">
+			<label for="website_link">Website Link</label>
+			{{ form.website_link(class_ = 'form-control', placeholder='http://', autofocus = true, value =
+			venue.website) }}
+		</div>
 
-    <div class="form-group">
-      <label for="seeking_talent">Looking for Talent</label>
-      {{ form.seeking_talent(placeholder='Venue', autofocus = true, checked = venue.seeking_talent) }}
-    </div>
+		<div class="form-group">
+			<label for="seeking_talent">Looking for Talent</label>
+			{{ form.seeking_talent(placeholder='Venue', autofocus = true, checked = venue.seeking_talent) }}
+		</div>
 
-    <div class="form-group">
-      <label for="seeking_description">Seeking Description</label>
-      {{ form.seeking_description(class_ = 'form-control', autofocus = true, value = venue.seeking_description) }}
-    </div>
+		<div class="form-group">
+			<label for="seeking_description">Seeking Description</label>
+			{{ form.seeking_description(class_ = 'form-control', autofocus = true, value = venue.seeking_description) }}
+		</div>
 
-    <input type="submit" value="Edit Venue" class="btn btn-primary btn-lg btn-block">
-  </form>
+		<input type="submit" value="Edit Venue" class="btn btn-primary btn-lg btn-block">
+	</form>
 </div>
-<script>
-  function findselected(select, multi) {
-    if (multi == false) {
-      for (let i = 0; i < select.childNodes.length; i++) {
-        const value = select.childNodes[i].selected
-        if (value == true) {
-          return select.childNodes[i].value
-        }
-      };
-    }
-    else if (multi == true) {
-      const selected = []
-      for (let i = 0; i < select.childNodes.length; i++) {
-        const value = select.childNodes[i].selected
-        if (value == true) {
-          selected.push(select.childNodes[i].value)
-        }
-      };
-      return selected
-    }
-  };
-  const formelem = document.getElementById('form');
-  const venueId = formelem.getAttribute('data-id');
-  const link = '/venues/' + venueId + '/edit'
-  var mainlink = '/venues/' + venueId
-  document.getElementById('form').onsubmit = function (event) {
-    event.preventDefault();
-    fetch(link, {
-      method: 'POST',
-      body: JSON.stringify({
-        'name': document.getElementById('name').value,
-        'address': document.getElementById('address').value,
-        'city': document.getElementById('city').value,
-        'state': findselected(document.getElementById('state'), multi = false),
-        'phone': document.getElementById('phone').value,
-        'genres': findselected(document.getElementById('genres'), multi = true),
-        'facebook_link': document.getElementById('facebook_link').value,
-        'image_link': document.getElementById('image_link').value,
-        'website_link': document.getElementById('website_link').value,
-        'seeking_talent': document.getElementById('seeking_talent').checked,
-        'seeking_description': document.getElementById('seeking_description').value,
-      }),
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-      .then(function (response) {
-        window.open(mainlink, '_self')
-        console.log(response)
-        return response.json();
-      })
-      .catch(function () {
-        console.log('error')
-      })
-
-  };
-</script>
 {% endblock %}
