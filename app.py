@@ -86,7 +86,7 @@ def venues():
     stategroup = db.session.execute(
         """SELECT CITY, STATE,
 		COUNT(*) AS VENUES
-		FROM VENUE
+		FROM VENUE 
 		GROUP BY CITY, STATE"""
     )
     venuesresult = db.session.execute(
