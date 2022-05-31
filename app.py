@@ -582,12 +582,15 @@ def create_show_submission():
         show = upcoming_shows(show_id=ini, artist_id=art_id, artist_name=art_name,
                         artist_image_link=art_imagelink, venue_id=ven_id,
                         start_time=start_time)
+      try:
         db.session.add(show)
         db.session.commit()
- 
+        flash("Show was successfully listed!")
+      except:
+        db.session.rollback()
+        flash('An error occurred. Show could not be listed.')
 
     # on successful db insert, flash success
-    flash("Show was successfully listed!")
     # TODO: on unsuccessful db insert, flash an error instead.
     # e.g., flash('An error occurred. Show could not be listed.')
     # see: http://flask.pocoo.org/docs/1.0/patterns/flashing/
