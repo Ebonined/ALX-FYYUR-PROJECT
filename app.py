@@ -9,22 +9,11 @@ from logging import FileHandler, Formatter
 
 import babel
 import dateutil.parser
-from flask import (Flask, Response, flash, redirect, render_template, request,
+from flask import (Response, flash, redirect, render_template, request,
                    url_for)
-from flask_moment import Moment
-from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import Form
-
 from forms import *
-
-# ----------------------------------------------------------------------------#
-# App Config.
-# ----------------------------------------------------------------------------#
-
-app = Flask(__name__)
-moment = Moment(app)
-app.config.from_object("config")
-db = SQLAlchemy(app)
+from models import *
 
 # TODO: connect to a local postgresql database
 
