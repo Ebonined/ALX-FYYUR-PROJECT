@@ -55,25 +55,16 @@ class Artist(db.Model):
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
 
 
-# ADDED: added tables for `past_shows` and `upcoming_shows`
-
-
-class past_shows(db.Model):
-    show_id = db.Column(db.Integer, primary_key=True)
+# ADDED: added tables for `shows`
+class Shows(db.Model):
+    __tablename__ = 'shows'
+    show_id = db.Column(db.Integer, db.Sequence('shows_id_seq'), primary_key=True)
     venue_id = db.Column(db.Integer)
     artist_id = db.Column(db.Integer)
     artist_name = db.Column(db.String(100))
     artist_image_link = db.Column(db.String(500))
     start_time = db.Column(db.DateTime)
 
-
-class upcoming_shows(db.Model):
-    show_id = db.Column(db.Integer, primary_key=True)
-    venue_id = db.Column(db.Integer)
-    artist_id = db.Column(db.Integer)
-    artist_name = db.Column(db.String(100))
-    artist_image_link = db.Column(db.String(500))
-    start_time = db.Column(db.DateTime)
 
 
 # TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.

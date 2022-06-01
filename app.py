@@ -20,6 +20,8 @@ from models import *
 # ----------------------------------------------------------------------------#
 # Filters.
 # ----------------------------------------------------------------------------#
+
+
 def format_date(value, format="medium"):
     date = dateutil.parser.parse(value)
     if format == "full":
@@ -27,6 +29,7 @@ def format_date(value, format="medium"):
     elif format == "medium":
         format = "y-MM-dd h:mma"
     return babel.dates.format_datetime(date, format, locale="en")
+
 
 def format_datetime(value, format="medium"):
     return value
@@ -75,16 +78,16 @@ def venues():
     stategroup = db.session.execute(
         """SELECT CITY, STATE,
 		COUNT(*) AS VENUES
-		FROM VENUE 
+		FROM VENUE
 		GROUP BY CITY, STATE"""
     )
     venuesresult = db.session.execute(
         """SELECT VENUE.VENUE_ID AS ID, VENUE.NAME,
-				VENUE.STATE, VENUE.CITY,
-				COALESCE(UPCOMING.NUM_UPCOMING_SHOWS, 0) AS NUM_UPCOMING_SHOWS
-				FROM VENUE LEFT JOIN (SELECT VENUE_ID, COUNT(*) AS NUM_UPCOMING_SHOWS
-				FROM UPCOMING_SHOWS GROUP BY VENUE_ID)
-				AS UPCOMING ON VENUE.VENUE_ID = UPCOMING.VENUE_ID"""
+            VENUE.STATE, VENUE.CITY,
+            COALESCE(UPCOMING.NUM_UPCOMING_SHOWS, 0) AS NUM_UPCOMING_SHOWS
+            FROM VENUE LEFT JOIN (SELECT VENUE_ID, COUNT(*) AS NUM_UPCOMING_SHOWS
+            FROM SHOWS where shows.start_time > Current_date GROUP BY VENUE_ID)
+            AS UPCOMING ON VENUE.VENUE_ID = UPCOMING.VENUE_ID"""
     )
     venuesresult = list(venuesresult)
     data = []
@@ -116,16 +119,19 @@ def search_venues():
     # TODO: implement search on venues with partial string search. Ensure it is case-insensitive.
     # seach for Hop should return "The Musical Hop".
     # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
-    search_term = request.form.get("search_term", "")
-    seresult = db.session.execute(f"""SELECT VENUE.VENUE_ID AS ID,
+    search_term = request.form.get("search_term", "").lower()
+    seresult = db.session.execute(f"""
+                                SELECT VENUE.VENUE_ID AS ID,
                                 VENUE.NAME AS NAME,
-                                COALESCE(UPCOMING.NUM_UPCOMING_SHOWS,0) 
+                                COALESCE(UPCOMING.NUM_UPCOMING_SHOWS,0)
                                 AS NUM_UPCOMING_SHOWS
                                 FROM VENUE LEFT JOIN (SELECT VENUE_ID,
-                                COUNT(*) AS NUM_UPCOMING_SHOWS FROM UPCOMING_SHOWS
-                                GROUP BY VENUE_ID) 
-                                AS UPCOMING ON VENUE.VENUE_ID = UPCOMING.VENUE_ID 
-                                WHERE LOWER(VENUE.NAME) like '%{search_term}%'"""
+                                COUNT(*) AS NUM_UPCOMING_SHOWS FROM SHOWS
+                                WHERE SHOWS.START_TIME > CURRENT_DATE
+                                GROUP BY VENUE_ID)
+                                AS UPCOMING ON VENUE.VENUE_ID = UPCOMING.VENUE_ID
+                                WHERE LOWER(VENUE.NAME) like '%{search_term}%'
+                                """
                                   )
 
     response = {}
@@ -154,13 +160,11 @@ def show_venue(venue_id):
 
     vTable = db.session.query(Venue).filter(
         Venue.venue_id == venue_id).all()[0]
-    psTable = db.session.query(past_shows).filter(
-        past_shows.venue_id == venue_id).all()
-    upsTable = (
-        db.session.query(upcoming_shows)
-        .filter(upcoming_shows.venue_id == venue_id)
-        .all()
-    )
+    psTable = db.session.query(Shows).filter(Shows.venue_id == venue_id).\
+        filter(Shows.start_time > db.func.current_date()).all()
+    upsTable = db.session.query(Shows).filter(Shows.venue_id == venue_id).\
+        filter(Shows.start_time < db.func.current_date()).all()
+
     # Convert database to dict for jinja2 compatibility
     venue = {}
     try:
@@ -220,10 +224,18 @@ def create_venue_submission():
     # TODO: insert form data as a new Venue record in the db, instead
     # TODO: modify data to be the data object returned from db insertion
     result = request.form
-    print(result)
-    print(result["name"])
+    allid = db.session.execute('SELECT VENUE_ID FROM VENUE')
+    ids = [int(id['venue_id']) for id in allid]
+    ids.sort()
+    ini = 1
+    for id in ids:
+        if ini < id:
+            ini = ini
+            break
+        else:
+            ini += 1
     try:
-        venue = Venue(name=result["name"], genres=",".join(result.getlist('genres')),
+        venue = Venue(venue_id=ini, name=result["name"], genres=",".join(result.getlist('genres')),
                       address=result["address"], city=result["city"], state=result["state"],
                       phone=result["phone"], website=result["website_link"],
                       facebook_link=result["facebook_link"],  seeking_talent=checkboxget(
@@ -280,13 +292,15 @@ def search_artists():
     # TODO: implement search on artists with partial string search. Ensure it is case-insensitive.
     # seach for "A" should return "Guns N Petals", "Matt Quevado", and "The Wild Sax Band".
     # search for "band" should return "The Wild Sax Band".
-    search_term = request.form.get("search_term", "")
-    seresult = db.session.execute(f"""SELECT ARTIST.ARTIST_ID AS ID,
+    search_term = request.form.get("search_term", "").lower()
+    seresult = db.session.execute(f"""                               
+                                SELECT ARTIST.ARTIST_ID AS ID,
                                 ARTIST.NAME AS NAME,
-                                COALESCE(UPCOMING.NUM_UPCOMING_SHOWS,0) 
+                                COALESCE(UPCOMING.NUM_UPCOMING_SHOWS,0)
                                 AS NUM_UPCOMING_SHOWS FROM ARTIST LEFT JOIN
                                 (SELECT ARTIST_ID, COUNT(*) AS NUM_UPCOMING_SHOWS
-                                FROM UPCOMING_SHOWS GROUP BY ARTIST_ID) 
+                                FROM SHOWS WHERE SHOWS.START_TIME > CURRENT_DATE
+                                GROUP BY ARTIST_ID)
                                 AS UPCOMING ON ARTIST.ARTIST_ID = UPCOMING.ARTIST_ID
                                 WHERE LOWER(ARTIST.NAME) like '%{search_term}%'"""
                                   )
@@ -302,6 +316,7 @@ def search_artists():
             tempdict[col] = result[col]
         datalist.append(tempdict)
     response['data'] = datalist
+    print(datalist)
 
     return render_template(
         "pages/search_artists.html",
@@ -317,20 +332,22 @@ def show_artist(artist_id):
 
     # Using raw sql to enable jinja2 template compatibility by using `AS`
     psTable = db.session.execute(
-        f"""SELECT * FROM PAST_SHOWS 
-              INNER JOIN (SELECT VENUE.VENUE_ID AS VENUE_ID,
-              VENUE.IMAGE_LINK AS VENUE_IMAGE_LINK,
-              VENUE.NAME AS VENUE_NAME FROM VENUE)
-              AS VENUE ON VENUE.VENUE_ID = PAST_SHOWS.VENUE_ID 
-              WHERE PAST_SHOWS.ARTIST_ID = {artist_id}"""
+        f"""SELECT * FROM SHOWS 
+            INNER JOIN (SELECT VENUE.VENUE_ID AS VENUE_ID,
+            VENUE.IMAGE_LINK AS VENUE_IMAGE_LINK,
+            VENUE.NAME AS VENUE_NAME FROM VENUE)
+            AS VENUE ON VENUE.VENUE_ID = SHOWS.VENUE_ID 
+            WHERE SHOWS.ARTIST_ID = {artist_id} 
+            AND SHOWS.START_TIME < CURRENT_DATE"""
     )
     upsTable = db.session.execute(
-        f"""SELECT * FROM UPCOMING_SHOWS 
-              INNER JOIN (SELECT VENUE.VENUE_ID AS VENUE_ID,
-              VENUE.IMAGE_LINK AS VENUE_IMAGE_LINK,
-              VENUE.NAME AS VENUE_NAME FROM VENUE)
-              AS VENUE ON VENUE.VENUE_ID = UPCOMING_SHOWS.VENUE_ID 
-              WHERE UPCOMING_SHOWS.ARTIST_ID = {artist_id}"""
+        f"""SELECT * FROM SHOWS 
+            INNER JOIN (SELECT VENUE.VENUE_ID AS VENUE_ID,
+            VENUE.IMAGE_LINK AS VENUE_IMAGE_LINK,
+            VENUE.NAME AS VENUE_NAME FROM VENUE)
+            AS VENUE ON VENUE.VENUE_ID = SHOWS.VENUE_ID 
+            WHERE SHOWS.ARTIST_ID = {artist_id} 
+            AND SHOWS.START_TIME > CURRENT_DATE"""
     )
     aTable = db.session.query(Artist).filter(
         Artist.artist_id == artist_id).all()[0]
@@ -477,8 +494,18 @@ def create_artist_submission():
     # TODO: insert form data as a new Venue record in the db, instead
     # TODO: modify data to be the data object returned from db insertion
     result = request.form
+    allid = db.session.execute('SELECT ARTIST_ID FROM ARTIST')
+    ids = [int(id['artist_id']) for id in allid]
+    ids.sort()
+    ini = 1
+    for id in ids:
+        if ini < id:
+            ini = ini
+            break
+        else:
+            ini += 1
     try:
-        artist = Artist(name=result["name"], genres=",".join(result.getlist('genres')),
+        artist = Artist(artist_id=ini, name=result["name"], genres=",".join(result.getlist('genres')),
                         city=result["city"], state=result["state"],
                         phone=result["phone"], website=result["website_link"],
                         facebook_link=result["facebook_link"],
@@ -505,23 +532,15 @@ def create_artist_submission():
 def shows():
     # displays list of shows at /shows
     # TODO: replace with real venues data.
-    past_shows_result = db.session.execute(f"""SELECT VENUE.VENUE_ID AS VENUE_ID,
+    shows_result = db.session.execute(f"""SELECT VENUE.VENUE_ID AS VENUE_ID,
                                     VENUE.NAME AS VENUE_NAME, ARTIST_ID,
                                     ARTIST_NAME, ARTIST_IMAGE_LINK, START_TIME
-                                    FROM PAST_SHOWS
-                                    JOIN VENUE ON PAST_SHOWS.VENUE_ID = VENUE.VENUE_ID
+                                    FROM SHOWS
+                                    JOIN VENUE ON SHOWS.VENUE_ID = VENUE.VENUE_ID
                                     ORDER BY START_TIME ASC"""
                                            )
-    up_shows_result = db.session.execute(f"""SELECT VENUE.VENUE_ID AS VENUE_ID,
-                                    VENUE.NAME AS VENUE_NAME, ARTIST_ID,
-                                    ARTIST_NAME, ARTIST_IMAGE_LINK, START_TIME
-                                    FROM UPCOMING_SHOWS
-                                    JOIN VENUE ON UPCOMING_SHOWS.VENUE_ID = VENUE.VENUE_ID
-                                    ORDER BY START_TIME ASC"""
-                                         )
-    ps_list = list(past_shows_result)
-    ups_list = list(up_shows_result)
-    ps_list.extend(ups_list)
+  
+    ps_list = list(shows_result)
 
     data = []
     for show in ps_list:
@@ -549,7 +568,7 @@ def create_show_submission():
                         WHERE ARTIST_ID = {result['artist_id']}''')
     venue_data = db.session.execute(f'''SELECT VENUE_ID FROM  VENUE
                         WHERE VENUE_ID = {result['venue_id']}''')
-    allid = db.session.execute('SELECT SHOW_ID FROM UPCOMING_SHOWS')
+    allid = db.session.execute('SELECT SHOW_ID FROM SHOWS')
     artistlist = list(artist_data)
     venuelist = list(venue_data)
     ids = [int(id['show_id']) for id in allid]
@@ -567,17 +586,17 @@ def create_show_submission():
         art_imagelink = artistlist[0]['image_link']
         ven_id = venuelist[0]['venue_id']
         start_time = format_date(result['start_time'])
-        print(art_id , art_name, art_imagelink, ven_id, start_time)
-        show = upcoming_shows(show_id=ini, artist_id=art_id, artist_name=art_name,
-                        artist_image_link=art_imagelink, venue_id=ven_id,
-                        start_time=start_time)
-      try:
-        db.session.add(show)
-        db.session.commit()
-        flash("Show was successfully listed!")
-      except:
-        db.session.rollback()
-        flash('An error occurred. Show could not be listed.')
+        print(art_id, art_name, art_imagelink, ven_id, start_time)
+        show = Shows(show_id=ini, artist_id=art_id, artist_name=art_name,
+                              artist_image_link=art_imagelink, venue_id=ven_id,
+                              start_time=start_time)
+        try:
+            db.session.add(show)
+            db.session.commit()
+            flash("Show was successfully listed!")
+        except:
+            db.session.rollback()
+            flash('An error occurred. Show could not be listed.')
 
     # on successful db insert, flash success
     # TODO: on unsuccessful db insert, flash an error instead.
