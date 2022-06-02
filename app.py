@@ -6,12 +6,13 @@ import json
 import logging
 from email.mime import image
 from logging import FileHandler, Formatter
+from urllib import response
 
 import babel
 import dateutil.parser
-from flask import (Response, flash, redirect, render_template, request,
-                   url_for)
+from flask import Response, flash, redirect, render_template, request, url_for
 from flask_wtf import Form
+
 from forms import *
 from models import *
 
@@ -255,14 +256,29 @@ def create_venue_submission():
     return render_template("pages/home.html")
 
 
-@app.route("/venues/<venue_id>", methods=["DELETE"])
+@app.route("/venues/<int:venue_id>", methods=["POST"])
 def delete_venue(venue_id):
     # TODO: Complete this endpoint for taking a venue_id, and using
     # SQLAlchemy ORM to delete a record. Handle cases where the session commit could fail.
+    error = True
+    try:
+        name = db.session.query(Venue).filter(Venue.venue_id == venue_id).all()[0].name
+        db.session.query(Venue).filter(Venue.venue_id == venue_id).delete()
+        db.session.query(Shows).filter(Shows.venue_id == venue_id).delete()
+        db.session.commit()
+        flash(f'Venue: {name}, has been deleted')
+    except:
+        db.session.rollback()
+        error = False
+        flash(f'Error deleting Venue: {name}')
+    finally:
+        db.session.close()
+        if not error:
+            return redirect(url_for('show_venue', venue_id=venue_id))
 
     # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
     # clicking that button delete it from the db then redirect the user to the homepage
-    return None
+    return redirect(url_for('index'))
 
 
 #  Artists
@@ -438,11 +454,11 @@ def edit_artist_submission(artist_id):
 def edit_venue(venue_id):
     venue = db.session.execute(
         f"""SELECT VENUE_ID AS ID, NAME, GENRES,
-    ADDRESS, CITY, STATE, PHONE, WEBSITE, FACEBOOK_LINK, SEEKING_TALENT,
-    SEEKING_DESCRIPTION, IMAGE_LINK
-    FROM VENUE
-    WHERE VENUE_ID = {venue_id}"""
-    )
+            ADDRESS, CITY, STATE, PHONE, WEBSITE, FACEBOOK_LINK, SEEKING_TALENT,
+            SEEKING_DESCRIPTION, IMAGE_LINK
+            FROM VENUE
+            WHERE VENUE_ID = {venue_id}"""
+            )
     venue = next(venue)
     default_genres = sqlarraytolist(venue["genres"])
     form = VenueForm(state=venue["state"], genres=default_genres)

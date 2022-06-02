@@ -21,10 +21,12 @@
             <i class="fas fa-phone-alt"></i> {% if venue.phone %}{{ venue.phone }}{% else %}No Phone{% endif %}
         </p>
         <p>
-            <i class="fas fa-link"></i> {% if venue.website %}<a href="{{ venue.website }}" target="_blank">{{ venue.website }}</a>{% else %}No Website{% endif %}
+            <i class="fas fa-link"></i> {% if venue.website %}<a href="{{ venue.website }}" target="_blank">{{
+                venue.website }}</a>{% else %}No Website{% endif %}
         </p>
         <p>
-            <i class="fab fa-facebook-f"></i> {% if venue.facebook_link %}<a href="{{ venue.facebook_link }}" target="_blank">{{ venue.facebook_link }}</a>{% else %}No Facebook Link{% endif %}
+            <i class="fab fa-facebook-f"></i> {% if venue.facebook_link %}<a href="{{ venue.facebook_link }}"
+                target="_blank">{{ venue.facebook_link }}</a>{% else %}No Facebook Link{% endif %}
         </p>
         {% if venue.seeking_talent %}
         <div class="seeking">
@@ -44,7 +46,8 @@
     </div>
 </div>
 <section>
-    <h2 class="monospace">{{ venue.upcoming_shows_count }} Upcoming {% if venue.upcoming_shows_count == 1 %}Show{% else %}Shows{% endif %}</h2>
+    <h2 class="monospace">{{ venue.upcoming_shows_count }} Upcoming {% if venue.upcoming_shows_count == 1 %}Show{% else
+        %}Shows{% endif %}</h2>
     <div class="row">
         {%for show in venue.upcoming_shows %}
         <div class="col-sm-4">
@@ -58,7 +61,8 @@
     </div>
 </section>
 <section>
-    <h2 class="monospace">{{ venue.past_shows_count }} Past {% if venue.past_shows_count == 1 %}Show{% else %}Shows{% endif %}</h2>
+    <h2 class="monospace">{{ venue.past_shows_count }} Past {% if venue.past_shows_count == 1 %}Show{% else %}Shows{%
+        endif %}</h2>
     <div class="row">
         {%for show in venue.past_shows %}
         <div class="col-sm-4">
@@ -72,5 +76,10 @@
     </div>
 </section>
 {% if venue.id %}
-<a href="/venues/{{ venue.id }}/edit"><button class="btn btn-primary btn-lg">Edit</button></a> {% else %}
-<a href="/venues/{{ venue.venue_id }}/edit"><button class="btn btn-primary btn-lg">Edit</button></a> {% endif %} {% endblock %}
+<a href="/venues/{{ venue.id }}/edit"><button class="btn btn-primary btn-lg">Edit</button></a>
+{% else %}
+<a href="/venues/{{ venue.venue_id }}/edit"><button class="btn btn-primary btn-lg">Edit</button></a>
+{% endif %}
+<form id="form"  method="POST">
+    <input type="submit" value="Delete" class="btn btn-primary btn-lg">
+</form>{% endblock %}
