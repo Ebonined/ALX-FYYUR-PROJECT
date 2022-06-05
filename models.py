@@ -22,7 +22,7 @@ class Venue(db.Model):
 
     venue_id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, unique=True)
-    genres = db.Column(db.String(100))
+    genres = db.Column(db.ARRAY(db.String()))
     address = db.Column(db.String(120))
     city = db.Column(db.String(120))
     state = db.Column(db.String(120))
@@ -32,6 +32,7 @@ class Venue(db.Model):
     seeking_talent = db.Column(db.Boolean)
     seeking_description = db.Column(db.String(500))
     image_link = db.Column(db.String(500))
+    show_child = db.relationship("Shows", backref="venue", lazy=True)
     db.UniqueConstraint('name', name='uix_1')
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
 
@@ -45,12 +46,13 @@ class Artist(db.Model):
     city = db.Column(db.String(120))
     state = db.Column(db.String(120))
     phone = db.Column(db.String(120))
-    genres = db.Column(db.String(120))
+    genres = db.Column(db.ARRAY(db.String()))
     image_link = db.Column(db.String(500))
     website = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
     seeking_venue = db.Column(db.Boolean)
     seeking_description = db.Column(db.String(500))
+    show_child = db.relationship("Shows", backref="artist", lazy=True)
 
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
 
@@ -59,10 +61,8 @@ class Artist(db.Model):
 class Shows(db.Model):
     __tablename__ = 'shows'
     show_id = db.Column(db.Integer, db.Sequence('shows_id_seq'), primary_key=True)
-    venue_id = db.Column(db.Integer)
-    artist_id = db.Column(db.Integer)
-    artist_name = db.Column(db.String(100))
-    artist_image_link = db.Column(db.String(500))
+    venue_id = db.Column(db.Integer, db.ForeignKey('venue.venue_id'), nullable=False)
+    artist_id = db.Column(db.Integer, db.ForeignKey('artist.artist_id'), nullable=False)
     start_time = db.Column(db.DateTime)
 
 

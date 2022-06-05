@@ -43,12 +43,6 @@ app.jinja_env.filters["datetime"] = format_datetime
 # Added Funtions by Daniel Ebonine
 # ----------------------------------------------------------------------------#
 # Converts string postgresql array to list for jinja2 compartibility
-def sqlarraytolist(string):
-    string = string.strip()
-    string = string.replace(", ", ",")
-    return string.split(",")
-
-
 def checkboxget(mdict, key):
     try:
         var = mdict[key]
@@ -76,20 +70,16 @@ def index():
 def venues():
     # TODO: replace with real venues data.
     #       num_upcoming_shows should be aggregated based on number of upcoming shows per venue.
-    stategroup = db.session.execute(
-        """SELECT CITY, STATE,
-		COUNT(*) AS VENUES
-		FROM VENUE
-		GROUP BY CITY, STATE"""
-    )
-    venuesresult = db.session.execute(
-        """SELECT VENUE.VENUE_ID AS ID, VENUE.NAME,
-            VENUE.STATE, VENUE.CITY,
-            COALESCE(UPCOMING.NUM_UPCOMING_SHOWS, 0) AS NUM_UPCOMING_SHOWS
-            FROM VENUE LEFT JOIN (SELECT VENUE_ID, COUNT(*) AS NUM_UPCOMING_SHOWS
-            FROM SHOWS where shows.start_time > Current_date GROUP BY VENUE_ID)
-            AS UPCOMING ON VENUE.VENUE_ID = UPCOMING.VENUE_ID"""
-    )
+    stategroup = Venue.query.with_entities(Venue.city, Venue.state, db.func.count().label('venues')).\
+        group_by(Venue.city, Venue.state).all()
+    # Sub query for number of shows per venue
+    show = Shows.query.with_entities(Shows.venue_id, db.func.count().label('num_upcoming_shows')).\
+        filter(Shows.start_time > db.func.current_date()).group_by(
+            Shows.venue_id).subquery('upcoming')
+    # Main query for venuesresult
+    venuesresult = Venue.query.with_entities(Venue.venue_id.label('id'), Venue.name, Venue.state, Venue.city,
+                                             db.func.coalesce(show.columns.num_upcoming_shows, 0).
+                                             label('num_upcoming_shows')).join(show, isouter=True).all()
     venuesresult = list(venuesresult)
     data = []
     for r in stategroup:
@@ -121,22 +111,11 @@ def search_venues():
     # seach for Hop should return "The Musical Hop".
     # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
     search_term = request.form.get("search_term", "").lower()
-    seresult = db.session.execute(f"""
-                                SELECT VENUE.VENUE_ID AS ID,
-                                VENUE.NAME AS NAME,
-                                COALESCE(UPCOMING.NUM_UPCOMING_SHOWS,0)
-                                AS NUM_UPCOMING_SHOWS
-                                FROM VENUE LEFT JOIN (SELECT VENUE_ID,
-                                COUNT(*) AS NUM_UPCOMING_SHOWS FROM SHOWS
-                                WHERE SHOWS.START_TIME > CURRENT_DATE
-                                GROUP BY VENUE_ID)
-                                AS UPCOMING ON VENUE.VENUE_ID = UPCOMING.VENUE_ID
-                                WHERE LOWER(VENUE.NAME) like '%{search_term}%'
-                                """
-                                  )
+    searchresult = Venue.query.with_entities(Venue.venue_id.label('id'), Venue.name.label('name')).\
+        filter(Venue.name.ilike(f'%{search_term}%')).all()
 
     response = {}
-    search_list = list(seresult)
+    search_list = list(searchresult)
     response['count'] = len(search_list)
 
     datalist = []
@@ -183,12 +162,7 @@ def show_venue(venue_id):
 
     for v_col in v_col_key:
         # Convert array string to array for jinja compatibility
-        if v_col == "genres":
-            string = vTable.__getattribute__(f"{v_col}")
-            strarr = sqlarraytolist(string)
-            venue[f"{v_col}"] = strarr
-        else:
-            venue[f"{v_col}"] = vTable.__getattribute__(f"{v_col}")
+        venue[f"{v_col}"] = vTable.__getattribute__(f"{v_col}")
     ps = []
     for psrow in psTable:
         tempdict = {}
@@ -225,7 +199,7 @@ def create_venue_submission():
     # TODO: insert form data as a new Venue record in the db, instead
     # TODO: modify data to be the data object returned from db insertion
     result = request.form
-    allid = db.session.execute('SELECT VENUE_ID FROM VENUE')
+    allid = Venue.query.with_entities(Venue.venue_id).all()
     ids = [int(id['venue_id']) for id in allid]
     ids.sort()
     ini = 1
@@ -236,7 +210,7 @@ def create_venue_submission():
         else:
             ini += 1
     try:
-        venue = Venue(venue_id=ini, name=result["name"], genres=",".join(result.getlist('genres')),
+        venue = Venue(venue_id=ini, name=result["name"], genres=result.getlist('genres'),
                       address=result["address"], city=result["city"], state=result["state"],
                       phone=result["phone"], website=result["website_link"],
                       facebook_link=result["facebook_link"],  seeking_talent=checkboxget(
@@ -262,9 +236,10 @@ def delete_venue(venue_id):
     # SQLAlchemy ORM to delete a record. Handle cases where the session commit could fail.
     error = True
     try:
-        name = db.session.query(Venue).filter(Venue.venue_id == venue_id).all()[0].name
-        db.session.query(Venue).filter(Venue.venue_id == venue_id).delete()
+        name = db.session.query(Venue).filter(
+            Venue.venue_id == venue_id).all()[0].name
         db.session.query(Shows).filter(Shows.venue_id == venue_id).delete()
+        db.session.query(Venue).filter(Venue.venue_id == venue_id).delete()
         db.session.commit()
         flash(f'Venue: {name}, has been deleted')
     except:
@@ -288,10 +263,8 @@ def delete_venue(venue_id):
 @app.route("/artists")
 def artists():
     # TODO: replace with real data returned from querying the database
-    artistresult = db.session.execute("""SELECT ARTIST.ARTIST_ID AS ID,
-                                        ARTIST.NAME FROM ARTIST
-                                        ORDER BY ARTIST.ARTIST_ID ASC"""
-                                      )
+    artistresult = Artist.query.with_entities(Artist.artist_id.label('id'), Artist.name).\
+        order_by(db.asc(Artist.name))
     artist_list = list(artistresult)
     data = []
     for artist in artist_list:
@@ -309,19 +282,10 @@ def search_artists():
     # seach for "A" should return "Guns N Petals", "Matt Quevado", and "The Wild Sax Band".
     # search for "band" should return "The Wild Sax Band".
     search_term = request.form.get("search_term", "").lower()
-    seresult = db.session.execute(f"""                               
-                                SELECT ARTIST.ARTIST_ID AS ID,
-                                ARTIST.NAME AS NAME,
-                                COALESCE(UPCOMING.NUM_UPCOMING_SHOWS,0)
-                                AS NUM_UPCOMING_SHOWS FROM ARTIST LEFT JOIN
-                                (SELECT ARTIST_ID, COUNT(*) AS NUM_UPCOMING_SHOWS
-                                FROM SHOWS WHERE SHOWS.START_TIME > CURRENT_DATE
-                                GROUP BY ARTIST_ID)
-                                AS UPCOMING ON ARTIST.ARTIST_ID = UPCOMING.ARTIST_ID
-                                WHERE LOWER(ARTIST.NAME) like '%{search_term}%'"""
-                                  )
+    searchesult = Artist.query.with_entities(Artist.artist_id.label('id'), Artist.name.label('name')).\
+        filter(Artist.name.ilike(f'%{search_term}%')).all()
     response = {}
-    search_list = list(seresult)
+    search_list = list(searchesult)
     response['count'] = len(search_list)
 
     datalist = []
@@ -332,7 +296,6 @@ def search_artists():
             tempdict[col] = result[col]
         datalist.append(tempdict)
     response['data'] = datalist
-    print(datalist)
 
     return render_template(
         "pages/search_artists.html",
@@ -347,24 +310,15 @@ def show_artist(artist_id):
     # TODO: replace with real artist data from the artist table, using artist_id
 
     # Using raw sql to enable jinja2 template compatibility by using `AS`
-    psTable = db.session.execute(
-        f"""SELECT * FROM SHOWS 
-            INNER JOIN (SELECT VENUE.VENUE_ID AS VENUE_ID,
-            VENUE.IMAGE_LINK AS VENUE_IMAGE_LINK,
-            VENUE.NAME AS VENUE_NAME FROM VENUE)
-            AS VENUE ON VENUE.VENUE_ID = SHOWS.VENUE_ID 
-            WHERE SHOWS.ARTIST_ID = {artist_id} 
-            AND SHOWS.START_TIME < CURRENT_DATE"""
-    )
-    upsTable = db.session.execute(
-        f"""SELECT * FROM SHOWS 
-            INNER JOIN (SELECT VENUE.VENUE_ID AS VENUE_ID,
-            VENUE.IMAGE_LINK AS VENUE_IMAGE_LINK,
-            VENUE.NAME AS VENUE_NAME FROM VENUE)
-            AS VENUE ON VENUE.VENUE_ID = SHOWS.VENUE_ID 
-            WHERE SHOWS.ARTIST_ID = {artist_id} 
-            AND SHOWS.START_TIME > CURRENT_DATE"""
-    )
+    venues = Venue.query.with_entities(
+        Venue.venue_id, Venue.image_link, Venue.name).subquery('venue')
+    shows = Shows.query.subquery('shows')
+    psTable = Shows.query.with_entities(Shows.show_id, Shows.venue_id, Shows.artist_id, Shows.start_time, venues).join(venues).\
+        filter(Shows.start_time < db.func.current_date()
+               ).filter(Shows.artist_id == artist_id)
+    upsTable = Shows.query.with_entities(Shows.show_id, Shows.venue_id, Shows.artist_id, Shows.start_time, venues).join(venues).\
+        filter(Shows.start_time > db.func.current_date()
+               ).filter(Shows.artist_id == artist_id)
     aTable = db.session.query(Artist).filter(
         Artist.artist_id == artist_id).all()[0]
 
@@ -375,11 +329,7 @@ def show_artist(artist_id):
         v_col_key = []
 
     for v_col in v_col_key:
-        if v_col == "genres":
-            strarr = sqlarraytolist(aTable.__getattribute__(f"{v_col}"))
-            artist[f"{v_col}"] = strarr
-        else:
-            artist[f"{v_col}"] = aTable.__getattribute__(f"{v_col}")
+        artist[f"{v_col}"] = aTable.__getattribute__(f"{v_col}")
     ps = []
     for r in psTable:
         cols = list(r.keys())
@@ -409,15 +359,12 @@ def show_artist(artist_id):
 
 @app.route("/artists/<int:artist_id>/edit", methods=["GET"])
 def edit_artist(artist_id):
-    artist = db.session.execute(
-        f"""SELECT ARTIST_ID AS ID, NAME, GENRES,
-    CITY, STATE, PHONE, WEBSITE, FACEBOOK_LINK, SEEKING_VENUE,
-    SEEKING_DESCRIPTION, IMAGE_LINK
-    FROM ARTIST
-    WHERE ARTIST_ID = {artist_id}"""
-    )
-    artist = next(artist)
-    default_genres = sqlarraytolist(artist["genres"])
+    artist = Artist.query.with_entities(Artist.artist_id.label('id'), Artist.name, Artist.genres,
+                                        Artist.city, Artist.state, Artist.phone, Artist.website,
+                                        Artist.facebook_link, Artist.seeking_venue, Artist.seeking_description, Artist.image_link).\
+        filter(Artist.artist_id == artist_id).all()[0]
+
+    default_genres = artist["genres"]
     form = ArtistForm(state=artist["state"], genres=default_genres)
     # TODO: populate form with fields from artist with ID <artist_id>
 
@@ -435,7 +382,7 @@ def edit_artist_submission(artist_id):
     query_filter.update(
         {
             Artist.name: result["name"],
-            Artist.genres: ",".join(result.getlist("genres")),
+            Artist.genres: result.getlist("genres"),
             Artist.city: result["city"],
             Artist.state: result["state"],
             Artist.phone: result["phone"],
@@ -452,15 +399,12 @@ def edit_artist_submission(artist_id):
 
 @app.route("/venues/<int:venue_id>/edit", methods=["GET"])
 def edit_venue(venue_id):
-    venue = db.session.execute(
-        f"""SELECT VENUE_ID AS ID, NAME, GENRES,
-            ADDRESS, CITY, STATE, PHONE, WEBSITE, FACEBOOK_LINK, SEEKING_TALENT,
-            SEEKING_DESCRIPTION, IMAGE_LINK
-            FROM VENUE
-            WHERE VENUE_ID = {venue_id}"""
-            )
-    venue = next(venue)
-    default_genres = sqlarraytolist(venue["genres"])
+    venue = Venue.query.with_entities(Venue.venue_id.label('id'), Venue.name, Venue.genres,
+                                      Venue.address, Venue.city, Venue.state, Venue.phone, Venue.website,
+                                      Venue.facebook_link, Venue.seeking_talent, Venue.seeking_description, Venue.image_link).\
+        filter(Venue.venue_id == venue_id).all()[0]
+
+    default_genres = venue["genres"]
     form = VenueForm(state=venue["state"], genres=default_genres)
 
     # TODO: populate form with values from venue with ID <venue_id>
@@ -478,7 +422,7 @@ def edit_venue_submission(venue_id):
     query_filter.update(
         {
             Venue.name: result["name"],
-            Venue.genres: ",".join(result.getlist('genres')),
+            Venue.genres: result.getlist('genres'),
             Venue.address: result["address"],
             Venue.city: result["city"],
             Venue.state: result["state"],
@@ -510,7 +454,7 @@ def create_artist_submission():
     # TODO: insert form data as a new Venue record in the db, instead
     # TODO: modify data to be the data object returned from db insertion
     result = request.form
-    allid = db.session.execute('SELECT ARTIST_ID FROM ARTIST')
+    allid = Artist.query.with_entities(Artist.artist_id).all()
     ids = [int(id['artist_id']) for id in allid]
     ids.sort()
     ini = 1
@@ -521,7 +465,7 @@ def create_artist_submission():
         else:
             ini += 1
     try:
-        artist = Artist(artist_id=ini, name=result["name"], genres=",".join(result.getlist('genres')),
+        artist = Artist(artist_id=ini, name=result["name"], genres=result.getlist('genres'),
                         city=result["city"], state=result["state"],
                         phone=result["phone"], website=result["website_link"],
                         facebook_link=result["facebook_link"],
@@ -548,15 +492,12 @@ def create_artist_submission():
 def shows():
     # displays list of shows at /shows
     # TODO: replace with real venues data.
-    shows_result = db.session.execute(f"""SELECT VENUE.VENUE_ID AS VENUE_ID,
-                                    VENUE.NAME AS VENUE_NAME, ARTIST_ID,
-                                    ARTIST_NAME, ARTIST_IMAGE_LINK, START_TIME
-                                    FROM SHOWS
-                                    JOIN VENUE ON SHOWS.VENUE_ID = VENUE.VENUE_ID
-                                    ORDER BY START_TIME ASC"""
-                                           )
-  
-    ps_list = list(shows_result)
+    venue = Venue.query.with_entities(
+        Venue.venue_id, Venue.name.label('venue_name')).subquery('venue')
+    artist = Artist.query.with_entities(
+        Artist.artist_id, Artist.name.label('artist_name'), Artist.image_link.label('artist_image_link')).subquery('artist')
+    ps_list = Shows.query.with_entities(venue, artist, Shows.show_id, Shows.start_time).join(venue).\
+        join(artist).order_by(db.asc(Shows.start_time)).all()
 
     data = []
     for show in ps_list:
@@ -565,6 +506,7 @@ def shows():
         for col in cols:
             tempdict[col] = show[col]
         data.append(tempdict)
+    print(data)
     return render_template("pages/shows.html", shows=data)
 
 
@@ -580,11 +522,12 @@ def create_show_submission():
     # called to create new shows in the db, upon submitting new show listing form
     # TODO: insert form data as a new Show record in the db, instead
     result = request.form
-    artist_data = db.session.execute(f'''SELECT ARTIST_ID, NAME, IMAGE_LINK FROM  ARTIST
-                        WHERE ARTIST_ID = {result['artist_id']}''')
-    venue_data = db.session.execute(f'''SELECT VENUE_ID FROM  VENUE
-                        WHERE VENUE_ID = {result['venue_id']}''')
-    allid = db.session.execute('SELECT SHOW_ID FROM SHOWS')
+    artist_data = Artist.query.with_entities(Artist.artist_id, Artist.name, Artist.image_link).\
+        filter(Artist.artist_id == result['artist_id']).all()
+    venue_data = Venue.query.with_entities(Venue.venue_id).\
+        filter(Venue.venue_id == result['venue_id']).all()
+    allid = Shows.query.with_entities(Shows.show_id).all()
+
     artistlist = list(artist_data)
     venuelist = list(venue_data)
     ids = [int(id['show_id']) for id in allid]
@@ -604,8 +547,8 @@ def create_show_submission():
         start_time = format_date(result['start_time'])
         print(art_id, art_name, art_imagelink, ven_id, start_time)
         show = Shows(show_id=ini, artist_id=art_id, artist_name=art_name,
-                              artist_image_link=art_imagelink, venue_id=ven_id,
-                              start_time=start_time)
+                     artist_image_link=art_imagelink, venue_id=ven_id,
+                     start_time=start_time)
         try:
             db.session.add(show)
             db.session.commit()
@@ -613,6 +556,9 @@ def create_show_submission():
         except:
             db.session.rollback()
             flash('An error occurred. Show could not be listed.')
+    else:
+        print(artistlist)
+        flash(f'An error occurred. Artist: {result["artist_id"]} and Venue: {result["venue_id"]} doesn\'t exist')
 
     # on successful db insert, flash success
     # TODO: on unsuccessful db insert, flash an error instead.
